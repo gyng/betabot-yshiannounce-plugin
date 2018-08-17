@@ -15,7 +15,7 @@ You will also have to fill out the keys in `manifest.json`. `manifest.json` will
 ## Install
 
 ```
-rake install_plugin[https://raw.githubusercontent.com/gyng/betabot-example-plugin/master/manifest.json]
+~install https://raw.githubusercontent.com/gyng/betabot-example-plugin/master/manifest.json save
 ```
 
 ## Update
