@@ -1,6 +1,6 @@
 {
     "name": "pong",
-    "git": "git@github.com:gyng/betabot-example-plugin.git",
+    "git": "https://github.com/gyng/betabot-example-plugin.git",
     "url": "https://github.com/gyng/betabot-example-plugin",
     "has_dependencies": false
 }
