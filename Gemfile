@@ -5,3 +5,8 @@
 # For example:
 #
 #     gem 'linguistics'
+
+group :test do
+  gem 'betabot', git: 'git@github.com:gyng/betabot.git'
+  gem 'rspec'
+end

@@ -30,3 +30,10 @@ rake update_plugin[pong]
 <user> ~pong
 <betabot> peng
 ```
+
+## Test
+
+```
+bundle install
+bundle exec rspec
+```

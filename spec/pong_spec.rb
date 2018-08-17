@@ -1,8 +1,4 @@
-# Right now, the test can only be run after it's installed
-# This will hopefully be improved in the future if/when
-# betabot structures are exposed as a library
-
-require 'spec_helper'
+require 'betabot' # loads as a lib for access to structures
 require_relative '../pong.rb'
 
 describe Bot::Plugin::Pong do
