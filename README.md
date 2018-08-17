@@ -1,5 +1,7 @@
 # betabot-example-plugin
 
+[![Build Status](https://travis-ci.org/gyng/betabot-example-plugin.svg?branch=master)](https://travis-ci.org/gyng/betabot-example-plugin)
+
 ```
 <gyng> ~install https://raw.githubusercontent.com/gyng/betabot-example-plugin/master/manifest.json save
 <betabot> 🎉 Plugin pong installed.
