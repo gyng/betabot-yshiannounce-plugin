@@ -21,7 +21,7 @@ You will also have to fill out the keys in `manifest.json`. `manifest.json` will
 ## Update
 
 ```
-rake update_plugin[pong]
+~update pong
 ```
 
 ## Use
