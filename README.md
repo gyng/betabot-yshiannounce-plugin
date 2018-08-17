@@ -22,7 +22,7 @@ The name (in `manifest.json`), filename and classname have to follow conventions
 |filename|pong.rb|
 |classname|Pong|
 
-You will also have to fill out the keys in `manifest.json`. `manifest.json` will be passed down to `rake install_plugin`.
+You will also have to fill out the keys in `manifest.json`.
 
 ## Install
 
