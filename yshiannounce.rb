@@ -144,7 +144,7 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
             separator = '►►►'.gray
             return "📣 #{vid_author.red} #{separator} #{vid_title.blue} #{separator} #{vid_href.gray}"
           else
-            Bot.log.info "#{self.class.name} Skipped feed item: missing one of #{vid_title} #{vid_id} #{vid_author}..."
+            # Bot.log.info "#{self.class.name} Skipped feed item: missing one of #{vid_title} #{vid_id} #{vid_author}..."
           end
         end
       end
