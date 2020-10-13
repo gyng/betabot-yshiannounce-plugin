@@ -1,45 +1,27 @@
-# betabot-example-plugin
+# betabot-yshiannounce-plugin
 
-```
-<gyng> ~install https://raw.githubusercontent.com/gyng/betabot-example-plugin/master/manifest.json save
-<betabot> 🎉 Plugin pong installed.
-<betabot> Reloaded.
-<betabot> Configuration saved.
-
-<gyng> ~pong
-<betabot> peng
-```
-
-This is an example plugin for [betabot](https://github.com/gyng/betabot/).
-
-The name (in `manifest.json`), filename and classname have to follow conventions.
-
-|||
-|-|-|
-|name|pong|
-|filename|pong.rb|
-|classname|Pong|
-
-You will also have to fill out the keys in `manifest.json`.
+This is a plugin for [betabot](https://github.com/gyng/betabot/) that relays a streaming pubsub feed.
 
 ## Install
 
 ```
-~install https://raw.githubusercontent.com/gyng/betabot-example-plugin/master/manifest.json save
+~install https://raw.githubusercontent.com/gyng/betabot-yshiannounce-plugin/master/manifest.json save
 ```
 
 ## Update
 
 ```
-~update pong
+~update yshiannounce
 ```
 
 ## Use
 
 ```
-<user> ~pong
-<betabot> peng
+~watchfeed https://myfeed.tld
+~watchdestadd irc:::server.#channel
 ```
+
+Restart or `~watchstart` as needed.
 
 ## Test
 
