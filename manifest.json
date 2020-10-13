@@ -1,6 +1,6 @@
 {
-    "name": "pong",
-    "git": "https://github.com/gyng/betabot-example-plugin.git",
-    "url": "https://github.com/gyng/betabot-example-plugin",
+    "name": "yshiannounce",
+    "git": "https://github.com/gyng/betabot-yshiannounce-plugin.git",
+    "url": "https://github.com/gyng/betabot-yshiannounce-plugin",
     "has_dependencies": false
 }
