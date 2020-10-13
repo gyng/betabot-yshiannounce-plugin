@@ -1,4 +1,6 @@
-# The reponame should match the supplied name
+# frozen_string_literal: true
+
+# The repo name should match the supplied name
 
 # The class name has to be a single capitalized name
 # and should match the filename
@@ -31,13 +33,20 @@ class Bot::Plugin::Pong < Bot::Plugin
     super(bot)
   end
 
-  def method_to_call(m = nil)
-    m.reply('peng')
+  def method_to_call(msg = nil)
+    msg.reply('peng')
+  end
+
+  # The method called when an adapter is fully ready
+  # Eg, when the bot has registered its nickname with the IRC server
+  def on_connect(_adapter, _connection)
+    # If IRC is addressable, send "Betabot is here!" to #mychannel on the IRC server group named "myserver"
+    @bot.address_str('irc:::myserver:::#mychannel')&.reply('Betabot is here!')
   end
 
   # This method receives published (=broadcasted) messages.
   # Since @s[:subscribe] is false, it is never called and is actually not required.
-  def receive(m)
+  def receive(msg)
     # Receiving a published message!
   end
 end

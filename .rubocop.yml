@@ -1,49 +1,6 @@
 AllCops:
-  TargetRubyVersion: 2.2
-
-Metrics/LineLength:
-  Max: 120
-
-Metrics/MethodLength:
-  Max: 50
-
-Metrics/AbcSize:
-  Enabled: false
-
-Metrics/ClassLength:
-  Max: 200
-
-Metrics/CyclomaticComplexity:
-  Max: 12
-
-Metrics/BlockNesting:
-  Max: 4
-
-Metrics/PerceivedComplexity:
-  Max: 12
-
-Style/Documentation:
-  Enabled: false
+  TargetRubyVersion: 2.7
+  NewCops: enable
 
 Style/ClassAndModuleChildren:
-  EnforcedStyle: compact
-
-Style/NegatedIf:
-  Enabled: false
-
-Style/WordArray:
-  Enabled: false
-
-Style/SymbolArray:
-  Enabled: false
-
-Metrics/BlockLength:
-  Enabled: true
-  Exclude:
-    - spec/**/*
-
-Layout/EndOfLine:
-  Enabled: false
-
-Naming/UncommunicativeMethodParamName:
   Enabled: false

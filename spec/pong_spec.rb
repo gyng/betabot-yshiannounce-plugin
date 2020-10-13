@@ -1,5 +1,7 @@
+# frozen_string_literal: true
+
 require 'betabot' # loads as a lib for access to structures
-require_relative '../pong.rb'
+require_relative '../pong'
 
 describe Bot::Plugin::Pong do
   subject { Bot::Plugin::Pong.new(nil) }
