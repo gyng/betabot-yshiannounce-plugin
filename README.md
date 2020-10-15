@@ -17,11 +17,10 @@ This is a plugin for [betabot](https://github.com/gyng/betabot/) that relays a s
 ## Use
 
 ```
-~watchfeed https://myfeed.tld
-~watchdestadd irc:::server.#channel
+~help yt
 ```
 
-Restart or `~watchstart` as needed.
+`~yt start` after reloading as the start is automatically triggered only on server connection.
 
 ## Test
 
