@@ -6,15 +6,11 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
   def initialize(bot)
     @s = {
       trigger: {
-        watchstart: [:start_listen, 0, 'Starts watching YSHI streams in this channel.'],
-        watchstop: [:stop_listen, 0, 'Starts watching YSHI streams in this channel.'],
-        watchdest: [:list_dest, 0, 'Lists announcement targets.'],
-        watchdestadd: [:add_dest, 0, 'Adds a destination announcement target eg. (irc:::servername.#channel)'],
-        watchdestrm: [:rm_dest, 0, 'Removes a destination announcement target.'],
-        watchfeed: [:feed_source, 0, 'Sets the watch feed source.']
+        yt: [:parse_cmd, 0, '<feed list|feed add <tag channel_id>|feed rm <tag>|feed import replace <json>|feed import-url replace <url>|feed export|dest list|dest add <address>|dest rm <address>|start|stop|endpoint|endpoint set <url>>']
       },
       subscribe: false,
       announce_targets: [],
+      watchlist: {},
       endpoint: ""
     }
 
@@ -28,45 +24,76 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
     start_listen
   end
 
-  def feed_source(m)
-    @s[:endpoint] = m.args[0]
-    save_settings
-    m.reply "Set to #{@s[:endpoint]}."
-  end
-
-  def rm_dest(m)
-    target = m.args[0]
-    found = @s[:announce_targets].delete(target)
-    save_settings
-    
-    if found
-      m.reply("Deleted #{target}.")
-    else
-      m.reply("Not deleted (not in list).")
-    end
-  end
-
-  def add_dest(m)
-    target = m.args[0]
-    if target
-      @s[:announce_targets].push(target).uniq!
+  def parse_cmd(m)
+    case m.args
+    in ['feed', 'add', tag, id]
+      found = @s[:watchlist][id]
+      if found
+        m.reply "(#{id}, #{found[0]}) is already being watched."
+        return
+      end
+      @s[:watchlist][id] = tag
       save_settings
-      m.reply "Added #{target}."
+      m.reply "Added (#{id}, #{tag})"
+    in ['feed', 'rm', id]
+      found = @s[:watchlist][id]
+      if found
+        @s[:watchlist].delete(id)
+        save_settings
+        m.reply "Removed #{id}"
+      else
+        m.reply "ID #{id} not found"
+      end
+    in ['feed', 'import', 'replace', *rest]
+      @s[:watchlist] = JSON.parse(rest.join(" "))
+      m.reply "Updated."
+    in ['feed', 'import-url', 'replace', url]
+      json = JSON.parse(RestClient.get(url).body)
+      @s[:watchlist] = json
+      m.reply "Updated. (pls no hax)"
+    in ['feed', 'export'] | ['feed', 'list']
+      m.reply @s[:watchlist].to_json
+    in ['dest', 'list']
+      m.reply @s[:announce_targets]
+    in ['dest', 'add', addr]
+      @s[:announce_targets].push(addr).uniq!
+      save_settings
+      m.reply "Added #{addr}."
+    in ['dest', 'rm', addr]
+      found = @s[:announce_targets].delete(addr)
+      if found
+        save_settings
+        m.reply("Deleted #{addr}.")
+      else
+        m.reply("Not deleted (not in list).")
+      end
+    in ['start']
+      start_listen(m)
+    in ['stop']
+      stop_listen(m)
+    in ['endpoint']
+      m.reply "Feed URL: #{@s[:endpoint]}"
+    in ['endpoint', 'set', url]
+      @s[:endpoint] = url
+      save_settings
+      m.reply "Feed set to #{url}"
     else
-      m.reply "Could not add #{target}"
+      m.reply "Unknown command."
     end
   end
 
-  def list_dest(m)
-    m.reply @s[:announce_targets].join(" ")
-  end
-
-  def stop_listen(m)
+  def stop_listen(m = nil)
     @thread.kill if @thread
-    m.reply("Stopped.")
+    m.reply("Stopped.") if m
   end
 
   def start_listen(m=nil)
+    if !@s[:endpoint] || @s[:endpoint].empty?
+      m.reply 'Endpoint not specified; cannot start watching.' if m
+      Bot.log.info "#{self.class.name}: Endpoint not specified; cannot start watching"
+      return
+    end
+
     @thread.kill if @thread
     @thread = Thread.new do
       buf = ""
@@ -90,12 +117,25 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
                 end
               end
             }
-            errback = proc { |e| Bot.log.info "#{self.class.name}: Failed to defer reply: #{e}" }
             EM.defer(operation, nil, nil)
           end
         end
       }
-      RestClient::Request.execute(method: :get, url: @s[:endpoint], block_response: block, read_timeout: nil)
+      begin
+        payload = @s[:watchlist]
+          .keys
+          .map { |id| {"hub": "https://pubsubhubbub.appspot.com/subscribe", "topic": "https://www.youtube.com/xml/feeds/videos.xml?channel_id=#{id}"}}
+          .map { |it| it.to_json }
+          .join("\n")
+        m.reply 'Started.' if m
+        RestClient::Request.execute(method: :post, payload: payload, url: @s[:endpoint], block_response: block, read_timeout: nil)
+      rescue RestClient::Exception => err
+        Bot.log.info "#{self.class.name}: Failed to read feed, retrying in 60s"
+        EM.add_timer(60) {
+          Bot.log.info "#{self.class.name}: Retrying..."
+          start_listen(m)
+        }
+      end
     end
   end
 
@@ -144,12 +184,13 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
             separator = '►►►'.gray
             return "📣 #{vid_author.red} #{separator} #{vid_title.blue} #{separator} #{vid_href.gray}"
           else
-            # Bot.log.info "#{self.class.name} Skipped feed item: missing one of #{vid_title} #{vid_id} #{vid_author}..."
+            Bot.log.info "#{self.class.name} Skipped feed item: missing one of #{vid_title} #{vid_id} #{vid_author}..."
           end
         end
       end
     else
-      Bot.log.info "#{self.class.name} Skipped feed item: #{chunk[0..62]}..."
+      # Don't log
+      # Bot.log.info "#{self.class.name} Skipped feed item: #{chunk[0..62]}..."
     end
 
     nil
