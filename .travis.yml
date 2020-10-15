@@ -1,7 +1,0 @@
-language: ruby
-rvm:
-  - 2.7
-script:
-  - bundle exec rspec
-  - bundle exec rubocop
-install: bundle install --jobs=3 --retry=3
