@@ -69,11 +69,12 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
       end
     in ['start']
       start_listen(m)
+      m.reply 'Initiated.'
     in ['stop']
       stop_listen(m)
     in ['endpoint']
       m.reply "Feed URL: #{@s[:endpoint]}"
-    in ['endpoint', 'set', url]
+      in ['endpoint', 'set', url]
       @s[:endpoint] = url
       save_settings
       m.reply "Feed set to #{url}"
@@ -95,41 +96,41 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
     end
 
     @thread.kill if @thread
+    # TODO: This should be split out so it can be tested
     @thread = Thread.new do
       buf = ""
-      chunks = []
+      feed_items = []
 
       block = proc { |response|
-        sep = /--[0-9a-f]{60}\r?\n?/
+        response.read_body do |body|
+          buf = buf + body
 
-        response.read_body do |chunk|
-          buf = buf + chunk
-          tmp_chunks = buf.split(sep)
-          chunks.concat(tmp_chunks[0..-1])
-          chunks = [tmp_chunks[-1]]
+          # Extract full items from text buffer
+          sep = /--[0-9a-f]{60}\r?\n?/
+          chunked_buf = buf.split(sep)
+          # If length == 1 split didn't find any seperators in the string
+          feed_items = chunked_buf[0..-2]
 
-          while chunks.length > 0
-            reply = process_chunk(chunks.pop)
-            operation = proc {
-              if reply
-                @s[:announce_targets].each do |address|
-                  msg = @bot.address_str(address)&.reply(reply)
-                end
-              end
-            }
-            EM.defer(operation, nil, nil)
+          # Process feed items
+          while feed_items.length > 0
+            feed_item = feed_items.pop
+            process_and_broadcast(feed_item)
           end
+
+          # Retain incomplete chunks
+          buf = chunked_buf[-1] if chunked_buf.length > 1
         end
       }
+
       begin
         payload = @s[:watchlist]
           .keys
           .map { |id| {"hub": "https://pubsubhubbub.appspot.com/subscribe", "topic": "https://www.youtube.com/xml/feeds/videos.xml?channel_id=#{id}"}}
           .map { |it| it.to_json }
           .join("\n")
-        m.reply 'Started.' if m
+        Bot.log.info "#{self.class.name}: Starting watch..."
         RestClient::Request.execute(method: :post, payload: payload, url: @s[:endpoint], block_response: block, read_timeout: nil)
-      rescue RestClient::Exception => err
+      rescue RestClient::Exception, OpenSSL::SSL::SSLError => err
         Bot.log.info "#{self.class.name}: Failed to read feed, retrying in 60s"
         EM.add_timer(60) {
           Bot.log.info "#{self.class.name}: Retrying..."
@@ -137,6 +138,18 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
         }
       end
     end
+  end
+
+  def process_and_broadcast(feed_item)
+    reply = process_feed_item(feed_item)
+    operation = proc {
+      if reply
+        @s[:announce_targets].each do |address|
+          msg = @bot.address_str(address)&.reply(reply)
+        end
+      end
+    }
+    EM.defer(operation, nil, nil)
   end
 
   # Chunk header
@@ -164,7 +177,7 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
   #     <updated>2020-10-13T08:06:12.229398109+00:00</updated>
   #   </entry>
   # </feed>
-  def process_chunk(chunk)
+  def process_feed_item(chunk)
     item_content_type = 'Content-Type: application/vnd.yshi.feed.item'
     if chunk.start_with?(item_content_type)
       stripped = chunk.gsub(/^#{item_content_type}/, '').to_s
