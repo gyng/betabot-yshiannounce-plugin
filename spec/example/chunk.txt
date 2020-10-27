@@ -1,0 +1,18 @@
+Content-Type: application/vnd.yshi.feed.item
+X-Unstable-Kafka-Offset: 977
+X-Unstable-Resume-Uri: /feed?unstable-kafka-offset=977
+
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns="http://www.w3.org/2005/Atom"><link rel="hub" href="https://pubsubhubbub.appspot.com"/><link rel="self" href="https://www.youtube.com/xml/feeds/videos.xml?channel_id=UCyl1z3jo3XHR1riLFKG5UAg"/><title>YouTube video feed</title><updated>2020-10-27T03:41:30.356245356+00:00</updated><entry>
+  <id>yt:video:z4BB-oUmT5A</id>
+  <yt:videoId>z4BB-oUmT5A</yt:videoId>
+  <yt:channelId>UCyl1z3jo3XHR1riLFKG5UAg</yt:channelId>
+  <title>Video title</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=z4xxoUmT5A"/>
+  <author>
+   <name>Channel name</name>
+   <uri>https://www.youtube.com/channel/UCyl1z3xxxXHR1riLFKG5UAg</uri>
+  </author>
+  <published>2020-10-27T03:41:20+00:00</published>
+  <updated>2020-10-27T03:41:30.356245356+00:00</updated>
+ </entry></feed>

@@ -16,6 +16,7 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
 
     @seen = {}
     @bot = bot
+    @helo = false
 
     super(bot)
   end
@@ -63,9 +64,9 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
       found = @s[:announce_targets].delete(addr)
       if found
         save_settings
-        m.reply("Deleted #{addr}.")
+        m.reply "Deleted #{addr}."
       else
-        m.reply("Not deleted (not in list).")
+        m.reply "Not deleted (not in list)."
       end
     in ['start']
       start_listen(m)
@@ -100,25 +101,35 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
     @thread = Thread.new do
       buf = ""
       feed_items = []
-
+      
       block = proc { |response|
         response.read_body do |body|
           buf = buf + body
 
-          # Extract full items from text buffer
-          sep = /--[0-9a-f]{60}\r?\n?/
-          chunked_buf = buf.split(sep)
-          # If length == 1 split didn't find any seperators in the string
-          feed_items = chunked_buf[0..-2]
+          sep = /--[0-9a-f]{60}\r*\n*/
+          chunks = buf.split(sep)
 
-          # Process feed items
-          while feed_items.length > 0
-            feed_item = feed_items.pop
+          # stall until next separator
+          # timeouts will keep the buffer populated
+          # timeout events are sent right after another event is sent so it will be consumed
+          while chunks.length > 1
+            feed_item = chunks.shift
             process_and_broadcast(feed_item)
           end
 
-          # Retain incomplete chunks
-          buf = chunked_buf[-1] if chunked_buf.length > 1
+          buf = "--#{'a' * 60}\n#{chunks[-1]}" if chunks.length == 1
+
+          # # Extract full items from text buffer
+          # chunked_buf = buf.split(sep)
+
+          # # Process feed items
+          # while feed_items.length > 0
+          #   feed_item = feed_items.pop
+          #   process_and_broadcast(feed_item)
+          # end
+
+          # # Retain incomplete chunks
+          # buf = chunked_buf[-1] if chunked_buf.length > 1
         end
       }
 
@@ -128,7 +139,8 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
           .map { |id| {"hub": "https://pubsubhubbub.appspot.com/subscribe", "topic": "https://www.youtube.com/xml/feeds/videos.xml?channel_id=#{id}"}}
           .map { |it| it.to_json }
           .join("\n")
-        Bot.log.info "#{self.class.name}: Starting watch..."
+
+        Bot.log.info "#{self.class.name}: Starting watch @ #{@s[:endpoint]}..."
         RestClient::Request.execute(method: :post, payload: payload, url: @s[:endpoint], block_response: block, read_timeout: nil)
       rescue RestClient::Exception, OpenSSL::SSL::SSLError => err
         Bot.log.info "#{self.class.name}: Failed to read feed, retrying in 60s"
@@ -179,10 +191,12 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
   # </feed>
   def process_feed_item(chunk)
     item_content_type = 'Content-Type: application/vnd.yshi.feed.item'
-    if chunk.start_with?(item_content_type)
-      stripped = chunk.gsub(/^#{item_content_type}/, '').to_s
-      item = Nokogiri.XML(stripped).remove_namespaces!
+    timeout_content_type = 'Content-Type: application/vnd.yshi.feed.timeout'
 
+    if chunk.start_with?(item_content_type)
+      # Remove all headers to start of XML document (Content-Type, X-Kafka-*)
+      stripped = chunk.gsub(/\A.+?\<\?xml/m, '<?xml')
+      item = Nokogiri.XML(stripped).remove_namespaces!
       id = item.xpath('//entry/id').first&.content
       
       if id
@@ -195,14 +209,20 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
 
           if vid_title && vid_id && vid_author
             separator = '►►►'.gray
-            return "📣 #{vid_author.red} #{separator} #{vid_title.blue} #{separator} #{vid_href.gray}"
+            return "📣 #{vid_author.red} #{separator} #{vid_title.blue} #{separator} #{"#{vid_href} ".gray}"
           else
             Bot.log.info "#{self.class.name} Skipped feed item: missing one of #{vid_title} #{vid_id} #{vid_author}..."
           end
         end
       end
+    elsif chunk.start_with?(timeout_content_type)
+      if !@helo
+        @helo = true
+        return "Yshiannounce: Connected. Watching #{@s[:watchlist].length} channels."
+      end
+      # Skip other timeouts
     else
-      # Don't log
+      # Don't log unknown items
       # Bot.log.info "#{self.class.name} Skipped feed item: #{chunk[0..62]}..."
     end
 
