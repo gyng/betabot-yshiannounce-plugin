@@ -17,6 +17,7 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
     @seen = {}
     @bot = bot
     @helo = false
+    @debug = false
 
     super(bot)
   end
@@ -79,6 +80,11 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
       @s[:endpoint] = url
       save_settings
       m.reply "Feed set to #{url}"
+    in ['debug', state]
+      @debug = state == 'true' ? true : false
+      m.reply "Debug set to #{@debug}."
+    in ['status']
+      m.reply "#{@thread ? 'Started' : 'Not started'}"
     else
       m.reply "Unknown command."
     end
@@ -86,6 +92,7 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
 
   def stop_listen(m = nil)
     @thread.kill if @thread
+    @helo = false
     m.reply("Stopped.") if m
   end
 
@@ -140,9 +147,22 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
           .map { |it| it.to_json }
           .join("\n")
 
+        headers = {
+          'Accept' => 'application/vnd.yshi.feed; version=1.0'
+        }
+
         Bot.log.info "#{self.class.name}: Starting watch @ #{@s[:endpoint]}..."
-        RestClient::Request.execute(method: :post, payload: payload, url: @s[:endpoint], block_response: block, read_timeout: nil)
-      rescue RestClient::Exception, OpenSSL::SSL::SSLError => err
+
+        # Negative to get old feeds
+        offset = @debug ? -2 : 0
+        endpoint_url_with_offset = @s[:endpoint]
+        if offset < 0
+          endpoint_url_with_offset = "#{@s[:endpoint]}?unstable-kafka-offset=#{offset}"
+          Bot.log.info "#{self.class.name} [DEBUG] Using offset feed URL: #{endpoint_url_with_offset}"
+        end
+
+        RestClient::Request.execute(method: :post, headers: headers, payload: payload, url: endpoint_url_with_offset, block_response: block, read_timeout: nil)
+      rescue RestClient::Exception, OpenSSL::SSL::SSLError, SocketError => err
         Bot.log.info "#{self.class.name}: Failed to read feed, retrying in 60s"
         EM.add_timer(60) {
           Bot.log.info "#{self.class.name}: Retrying..."
@@ -154,6 +174,11 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
 
   def process_and_broadcast(feed_item)
     reply = process_feed_item(feed_item)
+
+    if @debug
+      Bot.log.info "#{self.class.name} [DEBUG] [Feed item] #{feed_item}"
+    end
+
     operation = proc {
       if reply
         @s[:announce_targets].each do |address|
@@ -164,6 +189,8 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
     EM.defer(operation, nil, nil)
   end
 
+  # Accept: application/vnd.yshi.feed; version=1.0 for live notifications
+  #
   # Chunk header
   # ----58c56b4bb1a11494b0877075b47400b334c0f215ea9cd463091323638c32\r\nContent-Type: application/vnd.yshi.feed.item\r\n\r\n
   # or
@@ -189,11 +216,34 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
   #     <updated>2020-10-13T08:06:12.229398109+00:00</updated>
   #   </entry>
   # </feed>
+  #
+  # --a7bc3ef0918952e06f190ad31a7f6f7afed83fcb5f7b42e1d238226e5144
+  # Content-Type: application/vnd.yshi.feed.live-notification
+  # X-Unstable-Kafka-Offset: 16
+  # X-Unstable-Resume-Uri: /feed?unstable-kafka-offset=16
+  #
+  # {"title":"Minecraft💖collaboration💖date 【Ninomae Ina'nis/尾丸ポルカ/桃鈴ねね】","author_name":"Polka Ch. 尾丸ポルカ","channel_id":"UCK9V2B22uJYu3N7eR_BT9QA","event":"live","video_id":"PSlE_EODjbQ"}
   def process_feed_item(chunk)
+    live_content_type = 'Content-Type: application/vnd.yshi.feed.live-notification'
     item_content_type = 'Content-Type: application/vnd.yshi.feed.item'
     timeout_content_type = 'Content-Type: application/vnd.yshi.feed.timeout'
 
-    if chunk.start_with?(item_content_type)
+    if chunk.start_with?(live_content_type)
+      stripped = chunk.gsub(/\A.+?\{/m, '{')
+      item = JSON.parse(stripped, symbolize_names: true)
+      puts item.inspect
+      id = item[:video_id]
+
+      if item[:event] == 'live' && !@seen[id]
+        @seen[id] = 1
+        vid_author = item[:author_name]
+        vid_title = item[:title]
+        vid_href = "https://youtu.be/#{item[:video_id]}"
+        separator = '►►►'.gray
+
+        return "#{'🔴 LIVE'.red.bold} 📺 #{vid_author.red} #{separator} #{vid_title.blue} #{separator} #{"#{vid_href} ".gray}"
+      end
+    elsif chunk.start_with?(item_content_type)
       # Remove all headers to start of XML document (Content-Type, X-Kafka-*)
       stripped = chunk.gsub(/\A.+?\<\?xml/m, '<?xml')
       item = Nokogiri.XML(stripped).remove_namespaces!
