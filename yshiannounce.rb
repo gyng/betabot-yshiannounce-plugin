@@ -189,88 +189,99 @@ class Bot::Plugin::Yshiannounce < Bot::Plugin
     EM.defer(operation, nil, nil)
   end
 
-  # Accept: application/vnd.yshi.feed; version=1.0 for live notifications
-  #
-  # Chunk header
-  # ----58c56b4bb1a11494b0877075b47400b334c0f215ea9cd463091323638c32\r\nContent-Type: application/vnd.yshi.feed.item\r\n\r\n
-  # or
-  # ----58c56b4bb1a11494b0877075b47400b334c0f215ea9cd463091323638c32\r\nContent-Type: application/vnd.yshi.feed.timeout\r\n\r\n"
-  #
-  # <?xml version='1.0' encoding='UTF-8'?>
-  # <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns="http://www.w3.org/2005/Atom">
-  #   <link rel="hub" href="https://pubsubhubbub.appspot.com"/>
-  #   <link rel="self" href="https://www.youtube.com/xml/feeds/videos.xml?channel_id=UC1opHUrw8rvnsadT-iGp7Cg"/>
-  #   <title>YouTube video feed</title>
-  #   <updated>2020-10-13T08:06:12.229398109+00:00</updated>
-  #   <entry>
-  #     <id>yt:video:gcA2KNNYt5g</id>
-  #     <yt:videoId>gcA2KNNYt5g</yt:videoId>
-  #     <yt:channelId>UC1opHUrw8rvnsadT-iGp7Cg</yt:channelId>
-  #     <title>【マリオ35】 一 位 以 外 で 即 終 了 ！ 【湊あくあ/ホロライブ】</title>
-  #     <link rel="alternate" href="https://www.youtube.com/watch?v=gcA2KNNYt5g"/>
-  #     <author>
-  #       <name>Aqua Ch. 湊あくあ</name>
-  #       <uri>https://www.youtube.com/channel/UC1opHUrw8rvnsadT-iGp7Cg</uri>
-  #     </author>
-  #     <published>2020-10-13T08:05:04+00:00</published>
-  #     <updated>2020-10-13T08:06:12.229398109+00:00</updated>
-  #   </entry>
-  # </feed>
-  #
-  # --a7bc3ef0918952e06f190ad31a7f6f7afed83fcb5f7b42e1d238226e5144
-  # Content-Type: application/vnd.yshi.feed.live-notification
-  # X-Unstable-Kafka-Offset: 16
-  # X-Unstable-Resume-Uri: /feed?unstable-kafka-offset=16
-  #
-  # {"title":"Minecraft💖collaboration💖date 【Ninomae Ina'nis/尾丸ポルカ/桃鈴ねね】","author_name":"Polka Ch. 尾丸ポルカ","channel_id":"UCK9V2B22uJYu3N7eR_BT9QA","event":"live","video_id":"PSlE_EODjbQ"}
+  def process_yt_feed_chunk(chunk)
+    # ----58c56b4bb1a11494b0877075b47400b334c0f215ea9cd463091323638c32\r\nContent-Type: application/vnd.yshi.feed.timeout\r\n\r\n"
+    #
+    # <?xml version='1.0' encoding='UTF-8'?>
+    # <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns="http://www.w3.org/2005/Atom">
+    #   <link rel="hub" href="https://pubsubhubbub.appspot.com"/>
+    #   <link rel="self" href="https://www.youtube.com/xml/feeds/videos.xml?channel_id=UC1opHUrw8rvnsadT-iGp7Cg"/>
+    #   <title>YouTube video feed</title>
+    #   <updated>2020-10-13T08:06:12.229398109+00:00</updated>
+    #   <entry>
+    #     <id>yt:video:gcA2KNNYt5g</id>
+    #     <yt:videoId>gcA2KNNYt5g</yt:videoId>
+    #     <yt:channelId>UC1opHUrw8rvnsadT-iGp7Cg</yt:channelId>
+    #     <title>【マリオ35】 一 位 以 外 で 即 終 了 ！ 【湊あくあ/ホロライブ】</title>
+    #     <link rel="alternate" href="https://www.youtube.com/watch?v=gcA2KNNYt5g"/>
+    #     <author>
+    #       <name>Aqua Ch. 湊あくあ</name>
+    #       <uri>https://www.youtube.com/channel/UC1opHUrw8rvnsadT-iGp7Cg</uri>
+    #     </author>
+    #     <published>2020-10-13T08:05:04+00:00</published>
+    #     <updated>2020-10-13T08:06:12.229398109+00:00</updated>
+    #   </entry>
+    # </feed>
+
+    # Remove all headers to start of XML document (Content-Type, X-Kafka-*)
+    stripped = chunk.gsub(/\A.+?\<\?xml/m, '<?xml')
+    item = Nokogiri.XML(stripped).remove_namespaces!
+    id = item.xpath('//entry/id').first&.content
+    
+    if id
+      @seen[id] = @seen[id] ? @seen[id] + 1 : 1
+      if @seen[id] == 1
+        vid_title = item.xpath('//entry/title').first&.content
+        vid_id = item.xpath('//entry/videoId').first&.content
+        vid_author = item.xpath('//entry/author/name').first&.content
+        vid_href = "https://youtu.be/#{vid_id}"
+
+        if vid_title && vid_id && vid_author
+          separator = '►►►'.gray
+          return "📣 #{vid_author.red} #{separator} #{vid_title.blue} #{separator} #{"#{vid_href} ".gray}"
+        else
+          Bot.log.info "#{self.class.name} Skipped feed item: missing one of #{vid_title} #{vid_id} #{vid_author}..."
+        end
+      end
+    end
+  end
+
+  def process_live_feed_chunk(chunk)
+    # Accept: application/vnd.yshi.feed; version=1.0 for live notifications
+    #
+    # --a7bc3ef0918952e06f190ad31a7f6f7afed83fcb5f7b42e1d238226e5144
+    # Content-Type: application/vnd.yshi.feed.live-notification
+    # X-Unstable-Kafka-Offset: 16
+    # X-Unstable-Resume-Uri: /feed?unstable-kafka-offset=16
+    #
+    # {"title":"Minecraft💖collaboration💖date 【Ninomae Ina'nis/尾丸ポルカ/桃鈴ねね】","author_name":"Polka Ch. 尾丸ポルカ","channel_id":"UCK9V2B22uJYu3N7eR_BT9QA","event":"live","video_id":"PSlE_EODjbQ"}
+    stripped = chunk.gsub(/\A.+?\{/m, '{')
+    item = JSON.parse(stripped, symbolize_names: true)
+    puts item.inspect
+    id = item[:video_id]
+
+    if item[:event] == 'live' && !@seen[id]
+      @seen[id] = 1
+      vid_author = item[:author_name]
+      vid_title = item[:title]
+      vid_href = "https://youtu.be/#{item[:video_id]}"
+      separator = '►►►'.gray
+
+      return "#{'🔴 LIVE'.red.bold} 📺 #{vid_author.red} #{separator} #{vid_title.blue} #{separator} #{"#{vid_href} ".gray}"
+    end
+  end
+
+  def process_timeout_chunk(chunk)
+    if !@helo
+      @helo = true
+      return "Yshiannounce: Connected. Watching #{@s[:watchlist].length} channels."
+    end
+    # noop other timeouts
+  end
+
   def process_feed_item(chunk)
     live_content_type = 'Content-Type: application/vnd.yshi.feed.live-notification'
     item_content_type = 'Content-Type: application/vnd.yshi.feed.item'
     timeout_content_type = 'Content-Type: application/vnd.yshi.feed.timeout'
 
     if chunk.start_with?(live_content_type)
-      stripped = chunk.gsub(/\A.+?\{/m, '{')
-      item = JSON.parse(stripped, symbolize_names: true)
-      puts item.inspect
-      id = item[:video_id]
-
-      if item[:event] == 'live' && !@seen[id]
-        @seen[id] = 1
-        vid_author = item[:author_name]
-        vid_title = item[:title]
-        vid_href = "https://youtu.be/#{item[:video_id]}"
-        separator = '►►►'.gray
-
-        return "#{'🔴 LIVE'.red.bold} 📺 #{vid_author.red} #{separator} #{vid_title.blue} #{separator} #{"#{vid_href} ".gray}"
-      end
+      return process_live_feed_chunk(chunk)
     elsif chunk.start_with?(item_content_type)
-      # Remove all headers to start of XML document (Content-Type, X-Kafka-*)
-      stripped = chunk.gsub(/\A.+?\<\?xml/m, '<?xml')
-      item = Nokogiri.XML(stripped).remove_namespaces!
-      id = item.xpath('//entry/id').first&.content
-      
-      if id
-        @seen[id] = @seen[id] ? @seen[id] + 1 : 1
-        if @seen[id] == 1
-          vid_title = item.xpath('//entry/title').first&.content
-          vid_id = item.xpath('//entry/videoId').first&.content
-          vid_author = item.xpath('//entry/author/name').first&.content
-          vid_href = "https://youtu.be/#{vid_id}"
-
-          if vid_title && vid_id && vid_author
-            separator = '►►►'.gray
-            return "📣 #{vid_author.red} #{separator} #{vid_title.blue} #{separator} #{"#{vid_href} ".gray}"
-          else
-            Bot.log.info "#{self.class.name} Skipped feed item: missing one of #{vid_title} #{vid_id} #{vid_author}..."
-          end
-        end
-      end
+      # Disable YT feed handling, we only want lives
+      # return process_yt_feed_chunk(chunk)
+      return nil
     elsif chunk.start_with?(timeout_content_type)
-      if !@helo
-        @helo = true
-        return "Yshiannounce: Connected. Watching #{@s[:watchlist].length} channels."
-      end
-      # Skip other timeouts
+      return process_timeout_chunk(chunk)
     else
       # Don't log unknown items
       # Bot.log.info "#{self.class.name} Skipped feed item: #{chunk[0..62]}..."
